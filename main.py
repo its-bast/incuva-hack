@@ -1,76 +1,59 @@
-from fastapi import FastAPI, Request
-import requests
 import os
+import requests
+from fastapi import FastAPI, Request
 from dotenv import load_dotenv
 from utils.llm import generate_reply
 
 load_dotenv()
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
+
 app = FastAPI()
 
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
-PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
+# --- Función para enviar mensajes a Telegram ---
+def enviar_mensaje(chat_id: int, texto: str):
+    url = f"{TELEGRAM_API}/sendMessage"
+    payload = {"chat_id": chat_id, "text": texto}
+    response = requests.post(url, json=payload)
+    print(f"📤 Mensaje enviado: {response.status_code}")
 
-# 1️⃣ Endpoint de verificación (GET)
+# --- Procesar mensaje con RAG + LLM ---
+def procesar_mensaje(texto_usuario: str) -> str:
+    return generate_reply(texto_usuario)
+
+# --- Endpoint para verificar webhook (Telegram) ---
 @app.get("/webhook")
-async def verify_webhook(request: Request):
-    mode = request.query_params.get("hub.mode")
-    token = request.query_params.get("hub.verify_token")
-    challenge = request.query_params.get("hub.challenge")
+async def verificar_webhook(request: Request):
+    return {"status": "Webhook activo"}
 
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        return int(challenge)
-    return {"error": "Token inválido"}, 403
-
-# 2️⃣ Endpoint para recibir mensajes (POST)
+# --- Endpoint Webhook para recibir mensajes ---
 @app.post("/webhook")
-async def handle_message(request: Request):
-    body = await request.json()
-    
-    print("📩 Mensaje recibido:", body)  # Debug
+async def webhook(request: Request):
+    data = await request.json()
+    print(f"📨 Datos recibidos: {data}")
 
-    try:
-        entry = body["entry"][0]
-        changes = entry["changes"][0]["value"]
-        messages = changes.get("messages")
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        texto = data["message"].get("text", "")
+        
+        if texto:
+            print(f"👤 Usuario {chat_id}: {texto}")
+            respuesta = procesar_mensaje(texto)
+            enviar_mensaje(chat_id, respuesta)
 
-        if messages:
-            message = messages[0]
-            user_number = message["from"]
-            user_text = message["text"]["body"]
-            
-            print(f"👤 Usuario: {user_number}")  # Debug
-            print(f"💬 Texto: {user_text}")     # Debug
+    return {"ok": True}
 
-            # Generar respuesta con tu modelo IA
-            reply = generate_reply(user_text)
-            print(f"🤖 Respuesta: {reply}")      # Debug
+# --- Configurar el Webhook con Telegram ---
+@app.on_event("startup")
+def configurar_webhook():
+    if WEBHOOK_URL and TELEGRAM_TOKEN:
+        url = f"{TELEGRAM_API}/setWebhook"
+        payload = {"url": f"{WEBHOOK_URL}/webhook"}
+        r = requests.post(url, json=payload)
+        print(f"🔗 Webhook configurado: {r.json()}")
+    else:
+        print("⚠️ TELEGRAM_TOKEN o WEBHOOK_URL no configurados")
 
-            # Enviar mensaje de vuelta a WhatsApp Cloud API
-            response = send_message(user_number, reply)
-            print(f"📤 Respuesta de envío: {response.status_code}")
-        else:
-            print("⚠️ No hay mensajes en el webhook")
-
-    except Exception as e:
-        print("❌ Error procesando mensaje:", e)
-        import traceback
-        traceback.print_exc()
-
-    return {"status": "ok"}
-
-# Función auxiliar para enviar mensajes
-def send_message(to, text):
-    url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "text": {"body": text}
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    print(f"📊 Status del envío: {response.status_code}, Respuesta: {response.text}")
-    return response
+print("🤖 Bot de Telegram con RAG iniciado")
