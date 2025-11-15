@@ -2,3 +2,8 @@ fastapi
 uvicorn
 python-dotenv
 requests
+# Nuevas dependencias para RAG
+PyPDF2
+sentence-transformers
+faiss-cpu
+numpy

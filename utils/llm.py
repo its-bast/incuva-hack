@@ -1,10 +1,23 @@
 import os
 import requests
+from .rag_system import RAGSystem
+
+# Inicializar RAG globalmente
+rag = RAGSystem()
+rag.load_database()  # Cargar si ya existe
 
 def generate_reply(user_text: str) -> str:
-    """Genera respuesta usando SOLO Groq API"""
+    """Genera respuesta usando Groq + RAG"""
     
-    print(f"🤖 Procesando con Groq: '{user_text}'")
+    print(f"🤖 Procesando con Groq + RAG: '{user_text}'")
+    
+    # Buscar en documentos técnicos
+    context = ""
+    if rag.index is not None:
+        similar_chunks = rag.search_similar(user_text, k=2)
+        if similar_chunks:
+            context = "\n\nContexto de manuales técnicos:\n" + "\n".join(similar_chunks)
+            print(f"📚 Contexto encontrado: {len(similar_chunks)} chunks")
     
     api_key = os.getenv("GROQ_API_KEY")
     
@@ -17,11 +30,19 @@ def generate_reply(user_text: str) -> str:
         "Content-Type": "application/json"
     }
     
+    # Prompt mejorado con contexto
+    system_prompt = """Eres un asistente de soporte técnico especializado. 
+    Responde en español de manera profesional y útil.
+    Si tienes contexto de manuales técnicos, úsalo para dar respuestas más precisas.
+    Si no tienes información técnica específica, responde de manera general pero útil."""
+    
+    user_message = user_text + context
+    
     payload = {
-        "model": "llama-3.1-8b-instant",  # Modelo gratuito de Groq
+        "model": "llama-3.1-8b-instant",
         "messages": [
-            {"role": "system", "content": "Eres un asistente útil y amigable que responde en español de manera natural y conversacional."},
-            {"role": "user", "content": user_text}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
         ],
         "temperature": 0.7,
         "max_tokens": 500
@@ -47,4 +68,13 @@ def generate_reply(user_text: str) -> str:
     
     return "🤖 No pude generar una respuesta en este momento."
 
-print("🚀 Sistema usando SOLO Groq API")
+def setup_rag(pdf_folder: str = "data/pdfs"):
+    """Función para configurar RAG - ejecutar una vez"""
+    global rag
+    if os.path.exists(pdf_folder) and os.listdir(pdf_folder):
+        rag.create_vector_database(pdf_folder)
+        print("✅ RAG configurado correctamente")
+    else:
+        print(f"⚠️ No se encontraron PDFs en {pdf_folder}")
+
+print("🚀 Sistema usando Groq API + RAG")
