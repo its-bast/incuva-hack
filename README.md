@@ -26,9 +26,8 @@ pip install -r requirements.txt
 ### 3. Crear archivo `.env`
 ```env
 # WhatsApp Business API
-VERIFY_TOKEN=tu_verify_token
-ACCESS_TOKEN=tu_access_token
-PHONE_NUMBER_ID=tu_phone_number_id
+TELEGRAM_TOKEN=tu_verify_token
+WEBHOOK_URL=tu_access_token
 
 # Groq API (gratis en https://groq.com/)
 GROQ_API_KEY=tu_groq_api_key
