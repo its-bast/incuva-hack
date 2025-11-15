@@ -14,7 +14,7 @@ Bot de WhatsApp inteligente que combina un LLM (Groq) con un sistema RAG para re
 
 ### 1. Clonar el repositorio
 ```bash
-git clone xd
+git clone https://github.com/sebastianromero07/incuva-hack.git
 cd incuva-hack
 ```
 
