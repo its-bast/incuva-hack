@@ -1,9 +1,12 @@
-fastapi
-uvicorn
+fastapi[all]
+uvicorn[standard]
 python-dotenv
 requests
-# Nuevas dependencias para RAG
-PyPDF2
 sentence-transformers
 faiss-cpu
-numpy
+python-jose[cryptography]
+python-multipart
+jinja2
+passlib[bcrypt]
+PyPDF2
+tinydb

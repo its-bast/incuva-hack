@@ -1,59 +1,131 @@
-import os
-import requests
-from fastapi import FastAPI, Request
+# CARGAR .env ANTES DE CUALQUIER IMPORT
 from dotenv import load_dotenv
-from utils.llm import generate_reply
-
 load_dotenv()
 
+import requests
+import os
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from utils.llm import generate_reply, get_welcome_message
+from dashboard.routes import router as dashboard_router
+from typing import Set
+
+# Variables de entorno
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://tu-app.railway.app")
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
+PORT = int(os.getenv("PORT", 8000))
 
-app = FastAPI()
+app = FastAPI(title="TOmi - RAG Bot Dashboard")
 
-# --- Función para enviar mensajes a Telegram ---
-def enviar_mensaje(chat_id: int, texto: str):
-    url = f"{TELEGRAM_API}/sendMessage"
-    payload = {"chat_id": chat_id, "text": texto}
-    response = requests.post(url, json=payload)
-    print(f"📤 Mensaje enviado: {response.status_code}")
+# Cache para mensajes duplicados
+processed_messages: Set[int] = set()
 
-# --- Procesar mensaje con RAG + LLM ---
-def procesar_mensaje(texto_usuario: str) -> str:
-    return generate_reply(texto_usuario)
+def cleanup_old_messages():
+    global processed_messages
+    if len(processed_messages) > 1000:
+        processed_messages.clear()
 
-# --- Endpoint para verificar webhook (Telegram) ---
-@app.get("/webhook")
-async def verificar_webhook(request: Request):
-    return {"status": "Webhook activo"}
+# Incluir rutas del dashboard (YA INCLUYE LANDING + PROTECCIÓN)
+app.include_router(dashboard_router)
 
-# --- Endpoint Webhook para recibir mensajes ---
+# Servir archivos estáticos
+try:
+    app.mount("/static", StaticFiles(directory="templates/static"), name="static")
+    print("✅ Archivos estáticos configurados")
+except Exception as e:
+    print(f"⚠️ Error configurando archivos estáticos: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    """Configurar webhook automáticamente"""
+    print("🚀 Iniciando TOmi...")
+    
+    if TELEGRAM_TOKEN and WEBHOOK_URL and WEBHOOK_URL != "https://tu-app.railway.app":
+        try:
+            webhook_endpoint = f"{WEBHOOK_URL}/webhook"
+            webhook_response = requests.post(
+                f"{TELEGRAM_API}/setWebhook",
+                json={"url": webhook_endpoint},
+                timeout=10
+            )
+            result = webhook_response.json()
+            print(f"🔗 Webhook configurado: {result}")
+            
+        except Exception as e:
+            print(f"⚠️ Error configurando webhook: {e}")
+    else:
+        print("⚠️ Webhook no configurado (desarrollo local)")
+
 @app.post("/webhook")
 async def webhook(request: Request):
-    data = await request.json()
-    print(f"📨 Datos recibidos: {data}")
-
-    if "message" in data:
-        chat_id = data["message"]["chat"]["id"]
-        texto = data["message"].get("text", "")
+    """Webhook de Telegram - PÚBLICO"""
+    try:
+        data = await request.json()
         
-        if texto:
-            print(f"👤 Usuario {chat_id}: {texto}")
-            respuesta = procesar_mensaje(texto)
-            enviar_mensaje(chat_id, respuesta)
+        if "message" in data:
+            message = data["message"]
+            message_id = message.get("message_id")
+            chat_id = message["chat"]["id"]
+            user_text = message.get("text", "")
+            
+            # Deduplicación
+            if message_id in processed_messages:
+                return {"status": "duplicated"}
+            
+            processed_messages.add(message_id)
+            cleanup_old_messages()
+            
+            print(f"📩 [{message_id}]: {user_text}")
+            
+            # Verificar bot activo
+            from dashboard.routes import get_bot_config
+            bot_config = get_bot_config()
+            
+            if bot_config.get('status') != 'active':
+                print("🔴 Bot inactivo")
+                return {"status": "bot_inactive"}
+            
+            # Generar respuesta
+            if user_text.lower() in ["/start", "start", "hola", "hello", "hi"]:
+                bot_reply = get_welcome_message()
+                print("👋 Enviando mensaje de bienvenida")
+            else:
+                bot_reply = generate_reply(user_text)
+            
+            # Enviar respuesta
+            send_response = requests.post(
+                f"{TELEGRAM_API}/sendMessage",
+                json={
+                    "chat_id": chat_id,
+                    "text": bot_reply
+                },
+                timeout=15
+            )
+            
+            print(f"📤 [{message_id}]: {send_response.status_code}")
+        
+        return {"status": "ok"}
+        
+    except Exception as e:
+        print(f"❌ Webhook error: {e}")
+        return {"status": "error"}
 
-    return {"ok": True}
+@app.get("/health")
+async def health():
+    """Health check - PÚBLICO"""
+    try:
+        from utils.llm import rag
+        return {
+            "status": "healthy",
+            "webhook_url": WEBHOOK_URL,
+            "documents": len(rag.list_documents()),
+            "chunks": len([c for c in rag.chunks if c.strip()]),
+            "telegram_configured": bool(TELEGRAM_TOKEN)
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
-# --- Configurar el Webhook con Telegram ---
-@app.on_event("startup")
-def configurar_webhook():
-    if WEBHOOK_URL and TELEGRAM_TOKEN:
-        url = f"{TELEGRAM_API}/setWebhook"
-        payload = {"url": f"{WEBHOOK_URL}/webhook"}
-        r = requests.post(url, json=payload)
-        print(f"🔗 Webhook configurado: {r.json()}")
-    else:
-        print("⚠️ TELEGRAM_TOKEN o WEBHOOK_URL no configurados")
-
-print("🤖 Bot de Telegram con RAG iniciado")
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

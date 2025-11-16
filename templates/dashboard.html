@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - TOmi</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="dashboard-navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">
+                <span style="font-size: 2rem;">🤖</span>
+                <span class="navbar-title">TOmi Dashboard</span>
+            </div>
+            <div class="navbar-user">
+                <span class="user-name">{{ user.name }}</span>
+                <a href="/logout" class="btn btn-secondary btn-small">Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <main class="dashboard-main">
+        <div class="dashboard-container">
+            
+            <!-- Success/Error Messages -->
+            {% if request.query_params.get('success') %}
+            <div class="flash-messages">
+                <div class="flash-message flash-success">
+                    {{ request.query_params.get('success') }}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if request.query_params.get('error') %}
+            <div class="flash-messages">
+                <div class="flash-message flash-error">
+                    {{ request.query_params.get('error') }}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">{{ pdf_count }}</div>
+                    <div class="stat-label">PDFs Cargados</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{ chunks_count }}</div>
+                    <div class="stat-label">Fragmentos de Texto</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">
+                        {% if rag_status %}✅{% else %}❌{% endif %}
+                    </div>
+                    <div class="stat-label">Estado RAG</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">
+                        {% if bot_config.status == 'active' %}🟢{% else %}🔴{% endif %}
+                    </div>
+                    <div class="stat-label">Bot Status</div>
+                </div>
+            </div>
+
+            <!-- Two Column Layout -->
+            <div class="dashboard-grid">
+                
+                <!-- Left Column: Bot Configuration -->
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <h2>⚙️ Configuración del Bot</h2>
+                    </div>
+                    <div class="card-body">
+                        
+                        <!-- Bot Status -->
+                        <div class="status-section">
+                            <div class="status-row">
+                                <span class="status-label">Estado del Bot:</span>
+                                <span class="status-badge status-{{ bot_config.status }}">
+                                    {{ 'Activo' if bot_config.status == 'active' else 'Inactivo' }}
+                                </span>
+                            </div>
+                            <form method="POST" action="/toggle-bot-status" class="status-form">
+                                <button type="submit" class="btn btn-primary btn-small">
+                                    {{ 'Desactivar Bot' if bot_config.status == 'active' else 'Activar Bot' }}
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Bot Configuration Form -->
+                        <form method="POST" action="/update-bot-config" class="config-form">
+                            <div class="form-group">
+                                <label for="welcome_message">Mensaje de Bienvenida</label>
+                                <textarea 
+                                    id="welcome_message" 
+                                    name="welcome_message" 
+                                    rows="3" 
+                                    required
+                                >{{ bot_config.welcome_message }}</textarea>
+                                <small class="form-hint">Este mensaje se enviará cuando un usuario inicie una conversación</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="handoff_message">Mensaje de Transferencia</label>
+                                <textarea 
+                                    id="handoff_message" 
+                                    name="handoff_message" 
+                                    rows="3" 
+                                    required
+                                >{{ bot_config.handoff_message }}</textarea>
+                                <small class="form-hint">Este mensaje se enviará cuando el bot transfiera a un agente humano</small>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary">
+                                Guardar Configuración
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Right Column: File Management -->
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <h2>📄 Gestión de Archivos</h2>
+                    </div>
+                    <div class="card-body">
+                        
+                        <!-- Upload Section -->
+                        <div class="upload-section">
+                            <form method="POST" action="/upload-pdf" enctype="multipart/form-data" class="upload-form">
+                                <div class="file-input-wrapper">
+                                    <input 
+                                        type="file" 
+                                        id="file" 
+                                        name="file" 
+                                        accept=".pdf"
+                                        required
+                                    >
+                                    <label for="file" class="file-input-label">
+                                        📄 <span class="file-label-text">Seleccionar PDF</span>
+                                        <span class="file-name"></span>
+                                    </label>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-block">
+                                    Subir PDF
+                                </button>
+                                <small class="form-hint">Solo archivos PDF (máx. 16 MB)</small>
+                            </form>
+                        </div>
+
+                        <!-- Files List -->
+                        <div class="files-section">
+                            <h3 class="files-title">PDFs Subidos ({{ pdf_count }})</h3>
+                            
+                            {% if pdfs %}
+                                <div class="files-list">
+                                    {% for pdf in pdfs %}
+                                        <div class="file-item">
+                                            <div class="file-info">
+                                                <span style="color: var(--primary-color, #4e4284);">📄</span>
+                                                <div class="file-details">
+                                                    <span class="file-name-text">{{ pdf }}</span>
+                                                </div>
+                                                
+                                            </div>
+                                            <form method="POST" action="/delete-pdf/{{ pdf }}" class="delete-form">
+                                                <button type="submit" class="btn-delete" onclick="return confirm('¿Estás seguro de eliminar este archivo?')">
+                                                    🗑️
+                                                </button>
+                                            </form>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="empty-state">
+                                    <p>📁 No hay PDFs subidos</p>
+                                    <small>Sube tu primera documentación para comenzar</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // File input preview
+        const fileInput = document.getElementById('file');
+        const fileNameSpan = document.querySelector('.file-name');
+        const fileLabelText = document.querySelector('.file-label-text');
+
+        if (fileInput && fileNameSpan && fileLabelText) {
+            fileInput.addEventListener('change', function(e) {
+                if (this.files && this.files[0]) {
+                    fileNameSpan.textContent = this.files[0].name;
+                    fileLabelText.style.display = 'none';
+                    fileNameSpan.style.display = 'inline';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

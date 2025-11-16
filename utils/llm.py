@@ -6,23 +6,33 @@ from .rag_system import RAGSystem
 rag = RAGSystem()
 rag.load_database()  # Cargar si ya existe
 
+def get_welcome_message() -> str:
+    """Mensaje de bienvenida fijo y amigable"""
+    return """👋 ¡Hola soy TOmi! Tu asistente virtual de soporte técnico.
+Estoy aquí para ayudarte con cualquier duda o problema que tengas.
+
+Cuéntame qué necesitas y te ayudaré al instante."""
+
 def generate_reply(user_text: str) -> str:
     """Genera respuesta usando Groq + RAG"""
     
-    print(f"🤖 Procesando con Groq + RAG: '{user_text}'")
+    print(f"🤖 Procesando: '{user_text[:50]}...'")
     
     # Buscar en documentos técnicos
     context = ""
+    context_info = ""
+    
     if rag.index is not None:
-        similar_chunks = rag.search_similar(user_text, k=2)
+        similar_chunks = rag.search_similar(user_text, k=3)
         if similar_chunks:
-            context = "\n\nContexto de manuales técnicos:\n" + "\n".join(similar_chunks)
-            print(f"📚 Contexto encontrado: {len(similar_chunks)} chunks")
+            context = "\n\nContexto técnico:\n" + "\n".join(similar_chunks[:2])
+            context_info = f"📚 Contexto: {len(similar_chunks)} chunks de {len(rag.list_documents())} documentos"
+            print(context_info)
     
     api_key = os.getenv("GROQ_API_KEY")
     
     if not api_key:
-        return "❌ Error: No se encontró GROQ_API_KEY. Regístrate en https://groq.com/ para obtener tu API key gratuita."
+        return "❌ Error de configuración. Contacta al administrador."
     
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -30,11 +40,23 @@ def generate_reply(user_text: str) -> str:
         "Content-Type": "application/json"
     }
     
-    # Prompt mejorado con contexto
-    system_prompt = """Eres un asistente de soporte técnico especializado. 
-    Responde en español de manera profesional y útil.
-    Si tienes contexto de manuales técnicos, úsalo para dar respuestas más precisas.
-    Si no tienes información técnica específica, responde de manera general pero útil."""
+    # Prompt mejorado
+    documents = rag.list_documents()
+    doc_info = f"\n\nTienes acceso a estos documentos: {', '.join(documents)}" if documents else ""
+    
+    system_prompt = f"""Eres TOmi, un asistente virtual de soporte técnico amigable y eficiente.
+    
+    PERSONALIDAD:
+    - Eres amigable, profesional y servicial
+    - Hablas en español de manera natural y cercana
+    - Siempre intentas ser útil y resolver problemas
+    
+    INSTRUCCIONES:
+    - Si tienes contexto técnico específico, úsalo para dar respuestas detalladas y precisas
+    - Si no tienes información específica, ofrece ayuda general pero útil
+    - Mantén las respuestas claras y bien estructuradas
+    - Usa emojis ocasionalmente para ser más amigable (pero sin exagerar)
+    - Si la consulta es muy específica y no tienes información, sugiere alternativas o contactar soporte especializado{doc_info}"""
     
     user_message = user_text + context
     
@@ -44,29 +66,29 @@ def generate_reply(user_text: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message}
         ],
-        "temperature": 0.7,
-        "max_tokens": 500
+        "temperature": 0.4,
+        "max_tokens": 400
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        print(f"🔍 Groq - Status: {response.status_code}")
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         
         if response.status_code == 200:
             data = response.json()
             if "choices" in data and len(data["choices"]) > 0:
                 reply = data["choices"][0]["message"]["content"].strip()
-                print(f"✅ Respuesta de Groq: {reply}")
+                print(f"✅ Respuesta generada: {len(reply)} caracteres")
                 return reply
         else:
-            print(f"❌ Groq error: {response.text}")
-            return f"Error de Groq: {response.status_code}. Verifica tu API key."
+            print(f"❌ Groq error: {response.status_code}")
+            return "Disculpa, tengo problemas técnicos en este momento 😅. Inténtalo de nuevo en unos momentos."
             
     except Exception as e:
-        print(f"❌ Groq exception: {e}")
-        return f"Error de conexión con Groq: {str(e)}"
+        print(f"❌ Exception: {e}")
+        return "Parece que hay un problema de conectividad 🔌. Inténtalo nuevamente por favor."
     
-    return "🤖 No pude generar una respuesta en este momento."
+    return "🤖 No pude procesar tu consulta. ¿Podrías reformularla de otra manera?"
+
 
 def setup_rag(pdf_folder: str = "data/pdfs"):
     """Función para configurar RAG - ejecutar una vez"""

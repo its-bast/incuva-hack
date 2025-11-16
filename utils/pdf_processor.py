@@ -2,6 +2,7 @@ import PyPDF2
 import os
 from typing import List
 
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     """Extrae texto de un PDF"""
     text = ""

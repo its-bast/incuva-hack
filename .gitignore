@@ -1,1 +1,70 @@
+# ===== ARCHIVOS SENSIBLES =====
 .env
+.env.local
+.env.production
+*.env
+
+# ===== DATOS DE USUARIOS =====
+data/
+users.json
+*.db
+*.sqlite
+
+# ===== BASE DE DATOS RAG =====
+faiss_db/
+*.index
+*.pkl
+chunks/
+embeddings/
+
+# ===== ARCHIVOS TEMPORALES =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ===== LOGS Y CACHE =====
+*.log
+logs/
+.cache/
+.pytest_cache/
+
+# ===== IDE Y EDITORES =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== SISTEMA OPERATIVO =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+Thumbs.db
+
+# ===== UPLOADS Y MEDIA =====
+uploads/
+media/
+static/uploads/
+
+# ===== CERTIFICADOS Y CLAVES =====
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ===== ARCHIVOS DE RESPALDO =====
+*.bak
+*.backup
+*.old
