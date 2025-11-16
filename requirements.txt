@@ -1,12 +1,12 @@
 fastapi
-uvicorn[standard]
+uvicorn
 python-dotenv
 requests
 sentence-transformers
 faiss-cpu
-python-jose[cryptography]
+python-jose
 python-multipart
 jinja2
-passlib[bcrypt]
+passlib
 PyPDF2
 tinydb
